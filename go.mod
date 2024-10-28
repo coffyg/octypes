@@ -1,3 +1,3 @@
-module github.com/Fy-/octypes
+module github.com/coffyg/octypes
 
 go 1.23.0

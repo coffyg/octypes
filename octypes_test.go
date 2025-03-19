@@ -2,7 +2,6 @@
 package octypes
 
 import (
-	"database/sql"
 	"encoding/json"
 	"strconv"
 	"testing"
@@ -18,11 +17,8 @@ func TestNullString(t *testing.T) {
 
 	// Test constructor with empty string
 	ns = NewNullString("")
-	if !ns.Valid {
-		t.Errorf("Expected Valid true for empty string")
-	}
-	if ns.String != "" {
-		t.Errorf("Expected String to be empty, got '%s'", ns.String)
+	if ns.Valid {
+		t.Errorf("Expected Valid false for empty string")
 	}
 
 	// Test JSON marshalling
@@ -30,8 +26,8 @@ func TestNullString(t *testing.T) {
 	if err != nil {
 		t.Errorf("Error marshalling NullString: %v", err)
 	}
-	if string(jsonData) != "\"\"" { // Should be "" (empty string JSON) now, not null
-		t.Errorf("Expected JSON '\"\"', got %s", jsonData)
+	if string(jsonData) != "null" {
+		t.Errorf("Expected JSON 'null', got %s", jsonData)
 	}
 
 	// Test JSON unmarshalling
@@ -71,11 +67,8 @@ func TestNullInt64(t *testing.T) {
 
 	// Test constructor with empty string
 	ni = NewNullInt64FromString("")
-	if !ni.Valid {
-		t.Errorf("Expected Valid true for empty string")
-	}
-	if ni.Int64 != 0 {
-		t.Errorf("Expected Int64 0, got %d", ni.Int64)
+	if ni.Valid {
+		t.Errorf("Expected Valid false for empty string")
 	}
 
 	// Test constructor with valid string
@@ -130,11 +123,8 @@ func TestNullBool(t *testing.T) {
 
 	// Test constructor with empty string
 	nb = NewNullBoolFromString("")
-	if !nb.Valid {
-		t.Errorf("Expected Valid true for empty string")
-	}
-	if nb.Bool != false {
-		t.Errorf("Expected Bool false, got %v", nb.Bool)
+	if nb.Valid {
+		t.Errorf("Expected Valid false for empty string")
 	}
 
 	// Test constructor with valid string
@@ -189,11 +179,8 @@ func TestNullFloat64(t *testing.T) {
 
 	// Test constructor with empty string
 	nf = NewNullFloat64FromString("")
-	if !nf.Valid {
-		t.Errorf("Expected Valid true for empty string")
-	}
-	if nf.Float64 != 0 {
-		t.Errorf("Expected Float64 0, got %f", nf.Float64)
+	if nf.Valid {
+		t.Errorf("Expected Valid false for empty string")
 	}
 
 	// Test constructor with valid string
@@ -436,81 +423,41 @@ func TestNullTypesIntegration(t *testing.T) {
 }
 
 func TestNullTypesWithNullValues(t *testing.T) {
-	// Test NullString with empty string value (not null anymore)
+	// Test NullString with null value
 	ns := NewNullString("")
 	jsonData, err := json.Marshal(ns)
 	if err != nil {
 		t.Errorf("Error marshalling NullString: %v", err)
 	}
-	if string(jsonData) != "\"\"" { // Should be "" (empty string JSON)
-		t.Errorf("Expected JSON \"\"\", got %s", jsonData)
-	}
-	
-	// To get a truly null NullString, we need to create it and set Valid=false manually
-	nullNs := &NullString{sql.NullString{Valid: false}}
-	jsonData, err = json.Marshal(nullNs)
-	if err != nil {
-		t.Errorf("Error marshalling null NullString: %v", err)
-	}
 	if string(jsonData) != "null" {
 		t.Errorf("Expected JSON 'null', got '%s'", jsonData)
 	}
 
-	// Test NullInt64 with empty string value (now valid with value 0)
+	// Test NullInt64 with null value
 	ni := NewNullInt64FromString("")
 	jsonData, err = json.Marshal(ni)
 	if err != nil {
 		t.Errorf("Error marshalling NullInt64: %v", err)
 	}
-	if string(jsonData) != "0" {
-		t.Errorf("Expected JSON '0', got '%s'", jsonData)
-	}
-	
-	// For a truly null NullInt64
-	nullNi := &NullInt64{sql.NullInt64{Valid: false}}
-	jsonData, err = json.Marshal(nullNi)
-	if err != nil {
-		t.Errorf("Error marshalling null NullInt64: %v", err)
-	}
 	if string(jsonData) != "null" {
 		t.Errorf("Expected JSON 'null', got '%s'", jsonData)
 	}
 
-	// Test NullFloat64 with empty string value (now valid with value 0)
+	// Test NullFloat64 with null value
 	nf := NewNullFloat64FromString("")
 	jsonData, err = json.Marshal(nf)
 	if err != nil {
 		t.Errorf("Error marshalling NullFloat64: %v", err)
 	}
-	if string(jsonData) != "0" {
-		t.Errorf("Expected JSON '0', got '%s'", jsonData)
-	}
-	
-	// For a truly null NullFloat64
-	nullNf := &NullFloat64{sql.NullFloat64{Valid: false}}
-	jsonData, err = json.Marshal(nullNf)
-	if err != nil {
-		t.Errorf("Error marshalling null NullFloat64: %v", err)
-	}
 	if string(jsonData) != "null" {
 		t.Errorf("Expected JSON 'null', got '%s'", jsonData)
 	}
 
-	// Test NullBool with empty string value (now valid with value false)
+	// Test NullBool with null value
 	nb := NewNullBoolFromString("")
 	jsonData, err = json.Marshal(nb)
 	if err != nil {
 		t.Errorf("Error marshalling NullBool: %v", err)
-	}
-	if string(jsonData) != "false" {
-		t.Errorf("Expected JSON 'false', got '%s'", jsonData)
-	}
-	
-	// For a truly null NullBool
-	nullNb := &NullBool{sql.NullBool{Valid: false}}
-	jsonData, err = json.Marshal(nullNb)
-	if err != nil {
-		t.Errorf("Error marshalling null NullBool: %v", err)
 	}
 	if string(jsonData) != "null" {
 		t.Errorf("Expected JSON 'null', got '%s'", jsonData)
@@ -692,84 +639,44 @@ func TestIntDictionaryValue(t *testing.T) {
 	}
 }
 
-func TestNullStringValueEmpty(t *testing.T) {
+func TestNullStringValueNil(t *testing.T) {
 	ns := NewNullString("")
 	val, err := ns.Value()
 	if err != nil {
 		t.Errorf("Expected no error from NullString.Value(), got %v", err)
 	}
-	if val != "" { // Should be empty string, not nil
-		t.Errorf("Expected empty string value, got '%v'", val)
-	}
-	
-	// For a truly null value
-	nullNs := &NullString{sql.NullString{Valid: false}}
-	val, err = nullNs.Value()
-	if err != nil {
-		t.Errorf("Expected no error from null NullString.Value(), got %v", err)
-	}
 	if val != nil {
 		t.Errorf("Expected value nil, got '%v'", val)
 	}
 }
 
-func TestNullInt64ValueZero(t *testing.T) {
+func TestNullInt64ValueNil(t *testing.T) {
 	ni := NewNullInt64FromString("")
 	val, err := ni.Value()
 	if err != nil {
 		t.Errorf("Expected no error from NullInt64.Value(), got %v", err)
 	}
-	if val != int64(0) {
-		t.Errorf("Expected value 0, got '%v'", val)
-	}
-	
-	// For a truly null value
-	nullNi := &NullInt64{sql.NullInt64{Valid: false}}
-	val, err = nullNi.Value()
-	if err != nil {
-		t.Errorf("Expected no error from null NullInt64.Value(), got %v", err)
-	}
 	if val != nil {
 		t.Errorf("Expected value nil, got '%v'", val)
 	}
 }
 
-func TestNullBoolValueFalse(t *testing.T) {
+func TestNullBoolValueNil(t *testing.T) {
 	nb := NewNullBoolFromString("")
 	val, err := nb.Value()
 	if err != nil {
 		t.Errorf("Expected no error from NullBool.Value(), got %v", err)
 	}
-	if val != false {
-		t.Errorf("Expected value false, got '%v'", val)
-	}
-	
-	// For a truly null value
-	nullNb := &NullBool{sql.NullBool{Valid: false}}
-	val, err = nullNb.Value()
-	if err != nil {
-		t.Errorf("Expected no error from null NullBool.Value(), got %v", err)
-	}
 	if val != nil {
 		t.Errorf("Expected value nil, got '%v'", val)
 	}
 }
 
-func TestNullFloat64ValueZero(t *testing.T) {
+func TestNullFloat64ValueNil(t *testing.T) {
 	nf := NewNullFloat64FromString("")
 	val, err := nf.Value()
 	if err != nil {
 		t.Errorf("Expected no error from NullFloat64.Value(), got %v", err)
-	}
-	if val != float64(0) {
-		t.Errorf("Expected value 0, got '%v'", val)
-	}
-	
-	// For a truly null value
-	nullNf := &NullFloat64{sql.NullFloat64{Valid: false}}
-	val, err = nullNf.Value()
-	if err != nil {
-		t.Errorf("Expected no error from null NullFloat64.Value(), got %v", err)
 	}
 	if val != nil {
 		t.Errorf("Expected value nil, got '%v'", val)

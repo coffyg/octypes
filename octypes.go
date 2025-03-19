@@ -162,7 +162,7 @@ type NullString struct {
 
 // NewNullString creates a new NullString.
 func NewNullString(s string) *NullString {
-	return &NullString{sql.NullString{String: s, Valid: true}}
+	return &NullString{sql.NullString{String: s, Valid: s != ""}}
 }
 
 // Scan implements the sql.Scanner interface.
@@ -240,11 +240,11 @@ func NewNullInt64(i int64) *NullInt64 {
 // NewNullInt64FromString creates a new NullInt64 from a string.
 func NewNullInt64FromString(s string) *NullInt64 {
 	if s == "" {
-		return &NullInt64{sql.NullInt64{Int64: 0, Valid: true}}
+		return &NullInt64{}
 	}
 	i, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return &NullInt64{sql.NullInt64{Int64: 0, Valid: true}}
+		return &NullInt64{}
 	}
 	return NewNullInt64(i)
 }
@@ -298,11 +298,11 @@ func NewNullBool(b bool) *NullBool {
 // NewNullBoolFromString creates a new NullBool from a string.
 func NewNullBoolFromString(s string) *NullBool {
 	if s == "" {
-		return &NullBool{sql.NullBool{Bool: false, Valid: true}}
+		return &NullBool{}
 	}
 	b, err := strconv.ParseBool(s)
 	if err != nil {
-		return &NullBool{sql.NullBool{Bool: false, Valid: true}}
+		return &NullBool{}
 	}
 	return NewNullBool(b)
 }
@@ -356,11 +356,11 @@ func NewNullFloat64(f float64) *NullFloat64 {
 // NewNullFloat64FromString creates a new NullFloat64 from a string.
 func NewNullFloat64FromString(s string) *NullFloat64 {
 	if s == "" {
-		return &NullFloat64{sql.NullFloat64{Float64: 0, Valid: true}}
+		return &NullFloat64{}
 	}
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		return &NullFloat64{sql.NullFloat64{Float64: 0, Valid: true}}
+		return &NullFloat64{}
 	}
 	return NewNullFloat64(f)
 }

@@ -59,3 +59,9 @@ glide.lock
 # Temporary files
 *.session
 tags
+BENCHMARK_RESULTS.md
+CLAUDE.md
+TODO.md
+todo.md
+OPTIMIZATION.md
+README.md

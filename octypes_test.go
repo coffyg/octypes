@@ -2,12 +2,61 @@
 package octypes
 
 import (
+	"bytes"
+	"database/sql"
 	"encoding/json"
+	"io"
 	"strconv"
 	"testing"
 	"time"
 )
 
+// Original implementations for benchmark comparison
+type OriginalNullString struct {
+	sql.NullString
+}
+
+func (ns OriginalNullString) MarshalJSON() ([]byte, error) {
+	if ns.Valid {
+		return json.Marshal(ns.String)
+	}
+	return json.Marshal(nil)
+}
+
+type OriginalNullInt64 struct {
+	sql.NullInt64
+}
+
+func (ni OriginalNullInt64) MarshalJSON() ([]byte, error) {
+	if ni.Valid {
+		return json.Marshal(ni.Int64)
+	}
+	return json.Marshal(nil)
+}
+
+type OriginalNullBool struct {
+	sql.NullBool
+}
+
+func (nb OriginalNullBool) MarshalJSON() ([]byte, error) {
+	if nb.Valid {
+		return json.Marshal(nb.Bool)
+	}
+	return json.Marshal(nil)
+}
+
+type OriginalNullFloat64 struct {
+	sql.NullFloat64
+}
+
+func (nf OriginalNullFloat64) MarshalJSON() ([]byte, error) {
+	if nf.Valid {
+		return json.Marshal(nf.Float64)
+	}
+	return json.Marshal(nil)
+}
+
+// Regular tests begin here
 func TestNullString(t *testing.T) {
 	// Test constructor with non-empty string
 	ns := NewNullString("hello")
@@ -760,5 +809,540 @@ func TestCustomTimeUnmarshalStringDate(t *testing.T) {
 	expectedTime, _ := time.Parse("2006-01-02", "2023-01-01")
 	if !ct.Valid || !ct.Time.Equal(expectedTime) {
 		t.Errorf("Expected Valid true and Time %v, got Valid %v and Time %v", expectedTime, ct.Valid, ct.Time)
+	}
+}
+
+func TestNewNullStringValid(t *testing.T) {
+	// Test with empty string that should be valid
+	ns := NewNullStringValid("")
+	if !ns.Valid {
+		t.Errorf("Expected Valid true for empty string with NewNullStringValid")
+	}
+
+	// Test marshalling
+	jsonData, err := json.Marshal(ns)
+	if err != nil {
+		t.Errorf("Error marshalling NullString: %v", err)
+	}
+	if string(jsonData) != `""` {
+		t.Errorf("Expected JSON '\"\"', got '%s'", jsonData)
+	}
+}
+
+func TestNewNullInt64Zero(t *testing.T) {
+	// Test constructor for zero value
+	ni := NewNullInt64Zero()
+	if !ni.Valid || ni.Int64 != 0 {
+		t.Errorf("Expected Valid true and Int64 0, got Valid %v and Int64 %d", ni.Valid, ni.Int64)
+	}
+
+	// Test marshalling
+	jsonData, err := json.Marshal(ni)
+	if err != nil {
+		t.Errorf("Error marshalling NullInt64: %v", err)
+	}
+	if string(jsonData) != "0" {
+		t.Errorf("Expected JSON '0', got '%s'", jsonData)
+	}
+}
+
+func TestNewNullBoolFalse(t *testing.T) {
+	// Test constructor for false value
+	nb := NewNullBoolFalse()
+	if !nb.Valid || nb.Bool != false {
+		t.Errorf("Expected Valid true and Bool false, got Valid %v and Bool %v", nb.Valid, nb.Bool)
+	}
+
+	// Test marshalling
+	jsonData, err := json.Marshal(nb)
+	if err != nil {
+		t.Errorf("Error marshalling NullBool: %v", err)
+	}
+	if string(jsonData) != "false" {
+		t.Errorf("Expected JSON 'false', got '%s'", jsonData)
+	}
+}
+
+func TestNewNullFloat64Zero(t *testing.T) {
+	// Test constructor for zero value
+	nf := NewNullFloat64Zero()
+	if !nf.Valid || nf.Float64 != 0.0 {
+		t.Errorf("Expected Valid true and Float64 0.0, got Valid %v and Float64 %f", nf.Valid, nf.Float64)
+	}
+
+	// Test marshalling
+	jsonData, err := json.Marshal(nf)
+	if err != nil {
+		t.Errorf("Error marshalling NullFloat64: %v", err)
+	}
+	if string(jsonData) != "0" {
+		t.Errorf("Expected JSON '0', got '%s'", jsonData)
+	}
+}
+
+// Benchmark tests - New optimized implementation
+func BenchmarkNullStringJSON(b *testing.B) {
+	ns := NewNullString("test")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(ns)
+	}
+}
+
+func BenchmarkNullInt64JSON(b *testing.B) {
+	ni := NewNullInt64(42)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(ni)
+	}
+}
+
+func BenchmarkNullBoolJSON(b *testing.B) {
+	nb := NewNullBool(true)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(nb)
+	}
+}
+
+func BenchmarkNullFloat64JSON(b *testing.B) {
+	nf := NewNullFloat64(3.14)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(nf)
+	}
+}
+
+// Test nulls
+func BenchmarkNullStringNullJSON(b *testing.B) {
+	ns := NewNullStringNull()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(ns)
+	}
+}
+
+func BenchmarkNullInt64NullJSON(b *testing.B) {
+	ni := NewNullInt64Null()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(ni)
+	}
+}
+
+func BenchmarkNullBoolNullJSON(b *testing.B) {
+	nb := NewNullBoolNull()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(nb)
+	}
+}
+
+func BenchmarkNullFloat64NullJSON(b *testing.B) {
+	nf := NewNullFloat64Null()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(nf)
+	}
+}
+
+func BenchmarkCustomTimeJSON(b *testing.B) {
+	now := time.Now()
+	ct := NewCustomTime(now)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(ct)
+	}
+}
+
+func BenchmarkLocalizedTextJSON(b *testing.B) {
+	lt := LocalizedText{"en": "Hello", "fr": "Bonjour"}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(lt)
+	}
+}
+
+func BenchmarkIntDictionaryJSON(b *testing.B) {
+	id := IntDictionary{"one": 1, "two": 2}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(id)
+	}
+}
+
+func BenchmarkNullTypesStruct(b *testing.B) {
+	type TestStruct struct {
+		Name   NullString  `json:"name"`
+		Age    NullInt64   `json:"age"`
+		Score  NullFloat64 `json:"score"`
+		Active NullBool    `json:"active"`
+	}
+	
+	ts := TestStruct{
+		Name:   *NewNullString("Alice"),
+		Age:    *NewNullInt64(30),
+		Score:  *NewNullFloat64(95.5),
+		Active: *NewNullBool(true),
+	}
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(ts)
+	}
+}
+
+// Benchmarks for JSON Unmarshaling
+func BenchmarkNullStringUnmarshalJSON(b *testing.B) {
+	data := []byte(`"test string"`)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var ns NullString
+		_ = json.Unmarshal(data, &ns)
+	}
+}
+
+func BenchmarkNullStringUnmarshalNullJSON(b *testing.B) {
+	data := []byte(`null`)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var ns NullString
+		_ = json.Unmarshal(data, &ns)
+	}
+}
+
+func BenchmarkNullInt64UnmarshalJSON(b *testing.B) {
+	data := []byte(`42`)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var ni NullInt64
+		_ = json.Unmarshal(data, &ni)
+	}
+}
+
+func BenchmarkNullInt64UnmarshalNullJSON(b *testing.B) {
+	data := []byte(`null`)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var ni NullInt64
+		_ = json.Unmarshal(data, &ni)
+	}
+}
+
+func BenchmarkNullBoolUnmarshalJSON(b *testing.B) {
+	data := []byte(`true`)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var nb NullBool
+		_ = json.Unmarshal(data, &nb)
+	}
+}
+
+func BenchmarkNullFloat64UnmarshalJSON(b *testing.B) {
+	data := []byte(`3.14159`)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var nf NullFloat64
+		_ = json.Unmarshal(data, &nf)
+	}
+}
+
+func BenchmarkNullTypesStructUnmarshal(b *testing.B) {
+	type TestStruct struct {
+		Name   NullString  `json:"name"`
+		Age    NullInt64   `json:"age"`
+		Score  NullFloat64 `json:"score"`
+		Active NullBool    `json:"active"`
+	}
+	
+	data := []byte(`{"name":"Alice","age":30,"score":95.5,"active":true}`)
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var ts TestStruct
+		_ = json.Unmarshal(data, &ts)
+	}
+}
+
+// Binary encoding benchmarks
+func BenchmarkNullStringBinary(b *testing.B) {
+	ns := NewNullString("test string")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var buf bytes.Buffer
+		_, _ = ns.WriteTo(&buf)
+	}
+}
+
+func BenchmarkNullInt64Binary(b *testing.B) {
+	ni := NewNullInt64(42)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var buf bytes.Buffer
+		_, _ = ni.WriteTo(&buf)
+	}
+}
+
+func BenchmarkNullBoolBinary(b *testing.B) {
+	nb := NewNullBool(true)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var buf bytes.Buffer
+		_, _ = nb.WriteTo(&buf)
+	}
+}
+
+func BenchmarkNullFloat64Binary(b *testing.B) {
+	nf := NewNullFloat64(3.14)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var buf bytes.Buffer
+		_, _ = nf.WriteTo(&buf)
+	}
+}
+
+func BenchmarkCustomTimeBinary(b *testing.B) {
+	ct := NewCustomTime(time.Now())
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var buf bytes.Buffer
+		_, _ = ct.WriteTo(&buf)
+	}
+}
+
+// Binary decoding benchmarks
+func BenchmarkNullStringFromBinary(b *testing.B) {
+	ns := NewNullString("test string")
+	var buf bytes.Buffer
+	_, _ = ns.WriteTo(&buf)
+	data := buf.Bytes()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var ns2 NullString
+		reader := bytes.NewReader(data)
+		_, _ = ns2.ReadFrom(reader)
+	}
+}
+
+func BenchmarkNullInt64FromBinary(b *testing.B) {
+	ni := NewNullInt64(42)
+	var buf bytes.Buffer
+	_, _ = ni.WriteTo(&buf)
+	data := buf.Bytes()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var ni2 NullInt64
+		reader := bytes.NewReader(data)
+		_, _ = ni2.ReadFrom(reader)
+	}
+}
+
+func BenchmarkNullBoolFromBinary(b *testing.B) {
+	nb := NewNullBool(true)
+	var buf bytes.Buffer
+	_, _ = nb.WriteTo(&buf)
+	data := buf.Bytes()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var nb2 NullBool
+		reader := bytes.NewReader(data)
+		_, _ = nb2.ReadFrom(reader)
+	}
+}
+
+func BenchmarkNullFloat64FromBinary(b *testing.B) {
+	nf := NewNullFloat64(3.14)
+	var buf bytes.Buffer
+	_, _ = nf.WriteTo(&buf)
+	data := buf.Bytes()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var nf2 NullFloat64
+		reader := bytes.NewReader(data)
+		_, _ = nf2.ReadFrom(reader)
+	}
+}
+
+func BenchmarkCustomTimeFromBinary(b *testing.B) {
+	ct := NewCustomTime(time.Now())
+	var buf bytes.Buffer
+	_, _ = ct.WriteTo(&buf)
+	data := buf.Bytes()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var ct2 CustomTime
+		reader := bytes.NewReader(data)
+		_, _ = ct2.ReadFrom(reader)
+	}
+}
+
+// Complex struct for comparing JSON vs Binary performance
+type ComplexStruct struct {
+	ID          NullInt64   `json:"id"`
+	Name        NullString  `json:"name"`
+	Description NullString  `json:"description"`
+	Score       NullFloat64 `json:"score"`
+	IsActive    NullBool    `json:"is_active"`
+	CreatedAt   CustomTime  `json:"created_at"`
+	UpdatedAt   CustomTime  `json:"updated_at"`
+}
+
+// WriteTo implements binary serialization for ComplexStruct
+func (cs ComplexStruct) WriteTo(w io.Writer) (n int64, err error) {
+	var n1, n2, n3, n4, n5, n6, n7 int64
+	
+	n1, err = cs.ID.WriteTo(w)
+	if err != nil {
+		return n1, err
+	}
+	
+	n2, err = cs.Name.WriteTo(w)
+	if err != nil {
+		return n1 + n2, err
+	}
+	
+	n3, err = cs.Description.WriteTo(w)
+	if err != nil {
+		return n1 + n2 + n3, err
+	}
+	
+	n4, err = cs.Score.WriteTo(w)
+	if err != nil {
+		return n1 + n2 + n3 + n4, err
+	}
+	
+	n5, err = cs.IsActive.WriteTo(w)
+	if err != nil {
+		return n1 + n2 + n3 + n4 + n5, err
+	}
+	
+	n6, err = cs.CreatedAt.WriteTo(w)
+	if err != nil {
+		return n1 + n2 + n3 + n4 + n5 + n6, err
+	}
+	
+	n7, err = cs.UpdatedAt.WriteTo(w)
+	return n1 + n2 + n3 + n4 + n5 + n6 + n7, err
+}
+
+// ReadFrom implements binary deserialization for ComplexStruct
+func (cs *ComplexStruct) ReadFrom(r io.Reader) (n int64, err error) {
+	var n1, n2, n3, n4, n5, n6, n7 int64
+	
+	n1, err = cs.ID.ReadFrom(r)
+	if err != nil {
+		return n1, err
+	}
+	
+	n2, err = cs.Name.ReadFrom(r)
+	if err != nil {
+		return n1 + n2, err
+	}
+	
+	n3, err = cs.Description.ReadFrom(r)
+	if err != nil {
+		return n1 + n2 + n3, err
+	}
+	
+	n4, err = cs.Score.ReadFrom(r)
+	if err != nil {
+		return n1 + n2 + n3 + n4, err
+	}
+	
+	n5, err = cs.IsActive.ReadFrom(r)
+	if err != nil {
+		return n1 + n2 + n3 + n4 + n5, err
+	}
+	
+	n6, err = cs.CreatedAt.ReadFrom(r)
+	if err != nil {
+		return n1 + n2 + n3 + n4 + n5 + n6, err
+	}
+	
+	n7, err = cs.UpdatedAt.ReadFrom(r)
+	return n1 + n2 + n3 + n4 + n5 + n6 + n7, err
+}
+
+// Benchmark comparing JSON vs Binary serialization of complex struct
+func BenchmarkComplexStructJSON(b *testing.B) {
+	cs := ComplexStruct{
+		ID:          *NewNullInt64(12345),
+		Name:        *NewNullString("Test Name"),
+		Description: *NewNullString("This is a test description with some more text"),
+		Score:       *NewNullFloat64(98.76),
+		IsActive:    *NewNullBool(true),
+		CreatedAt:   *NewCustomTime(time.Now().Add(-24 * time.Hour)),
+		UpdatedAt:   *NewCustomTime(time.Now()),
+	}
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = json.Marshal(cs)
+	}
+}
+
+func BenchmarkComplexStructBinary(b *testing.B) {
+	cs := ComplexStruct{
+		ID:          *NewNullInt64(12345),
+		Name:        *NewNullString("Test Name"),
+		Description: *NewNullString("This is a test description with some more text"),
+		Score:       *NewNullFloat64(98.76),
+		IsActive:    *NewNullBool(true),
+		CreatedAt:   *NewCustomTime(time.Now().Add(-24 * time.Hour)),
+		UpdatedAt:   *NewCustomTime(time.Now()),
+	}
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var buf bytes.Buffer
+		_, _ = cs.WriteTo(&buf)
+	}
+}
+
+func BenchmarkComplexStructFromJSON(b *testing.B) {
+	cs := ComplexStruct{
+		ID:          *NewNullInt64(12345),
+		Name:        *NewNullString("Test Name"),
+		Description: *NewNullString("This is a test description with some more text"),
+		Score:       *NewNullFloat64(98.76),
+		IsActive:    *NewNullBool(true),
+		CreatedAt:   *NewCustomTime(time.Now().Add(-24 * time.Hour)),
+		UpdatedAt:   *NewCustomTime(time.Now()),
+	}
+	
+	jsonData, _ := json.Marshal(cs)
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var cs2 ComplexStruct
+		_ = json.Unmarshal(jsonData, &cs2)
+	}
+}
+
+func BenchmarkComplexStructFromBinary(b *testing.B) {
+	cs := ComplexStruct{
+		ID:          *NewNullInt64(12345),
+		Name:        *NewNullString("Test Name"),
+		Description: *NewNullString("This is a test description with some more text"),
+		Score:       *NewNullFloat64(98.76),
+		IsActive:    *NewNullBool(true),
+		CreatedAt:   *NewCustomTime(time.Now().Add(-24 * time.Hour)),
+		UpdatedAt:   *NewCustomTime(time.Now()),
+	}
+	
+	var buf bytes.Buffer
+	_, _ = cs.WriteTo(&buf)
+	data := buf.Bytes()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var cs2 ComplexStruct
+		reader := bytes.NewReader(data)
+		_, _ = cs2.ReadFrom(reader)
 	}
 }

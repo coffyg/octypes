@@ -71,17 +71,58 @@ var (
 var digitMap [100][]byte
 
 // Resource pools for reducing allocations
-var timeResponsePool = sync.Pool{
-	New: func() interface{} {
-		return &TimeResponse{}
-	},
-}
+var (
+	// Pool for TimeResponse objects to avoid allocations in CustomTime.MarshalJSON
+	timeResponsePool = sync.Pool{
+		New: func() interface{} {
+			return &TimeResponse{}
+		},
+	}
+	
+	// Pool for byte slices used in unmarshaling
+	byteBufferPool = sync.Pool{
+		New: func() interface{} {
+			// Create a reasonably sized buffer for most operations
+			// This will grow if needed but provides a good starting point
+			return make([]byte, 64)
+		},
+	}
+	
+	// Pool for small byte slices used in binary serialization
+	smallBufferPool = sync.Pool{
+		New: func() interface{} {
+			// Create a buffer for small operations like int/float serialization
+			return make([]byte, 8)
+		},
+	}
+	
+	// String intern pool for reducing string allocations in maps
+	stringInternPool sync.Map
+	
+	// Common keys that are frequently used in map types
+	commonMapKeys = []string{
+		"id", "name", "title", "description", "type", "status", "value",
+		"count", "total", "price", "cost", "date", "time", "timestamp",
+		"created_at", "updated_at", "deleted_at", "user_id", "user",
+		"en", "fr", "de", "es", "it", "ja", "zh", "ru", "pt", "nl",
+		"ar", "ko", "tr", "pl", "uk", "el", "cs", "hu", "sv", "hi",
+		"en-US", "fr-FR", "de-DE", "es-ES", "it-IT", "ja-JP", "zh-CN",
+		"first_name", "last_name", "email", "phone", "address", "city",
+		"state", "country", "postal_code", "zip_code",
+	}
+)
 
 // init initializes the pre-allocated values
 func init() {
 	// Initialize the digit map for numbers 0-99
 	for i := 0; i < 100; i++ {
 		digitMap[i] = []byte(strconv.Itoa(i))
+	}
+	
+	// Pre-intern common map keys
+	for _, key := range commonMapKeys {
+		// Store the string as both key and value in the intern pool
+		stringInternPool.Store(key, key)
 	}
 }
 
@@ -304,9 +345,22 @@ func (lt *LocalizedText) Scan(value interface{}) error {
 	if !ok {
 		return errors.New("Scan source is not []byte")
 	}
-	// Reset lt before unmarshalling
-	*lt = make(LocalizedText)
-	return json.Unmarshal(asBytes, lt)
+	
+	// Standard unmarshal to a temporary map
+	m := make(map[string]string)
+	if err := json.Unmarshal(asBytes, &m); err != nil {
+		return err
+	}
+	
+	// Create a new map with interned keys
+	*lt = make(LocalizedText, len(m))
+	for k, v := range m {
+		// Intern the key to reduce memory usage
+		internedKey := internString(k)
+		(*lt)[internedKey] = v
+	}
+	
+	return nil
 }
 
 // Value implements the driver.Valuer interface.
@@ -340,7 +394,9 @@ func (lt *LocalizedText) UnmarshalJSON(b []byte) error {
 	// Create a new map to ensure we start fresh
 	*lt = make(LocalizedText, len(m))
 	for k, v := range m {
-		(*lt)[k] = v
+		// Intern the key to reduce memory usage
+		internedKey := internString(k)
+		(*lt)[internedKey] = v
 	}
 	
 	return nil
@@ -507,6 +563,26 @@ func isFalseJSON(b []byte) bool {
 	return len(b) == 5 && b[0] == 'f' && b[1] == 'a' && b[2] == 'l' && b[3] == 's' && b[4] == 'e'
 }
 
+// internString returns an interned version of the string to reduce memory usage
+// If the string is already in the pool, the interned version is returned
+// Otherwise, the string is added to the pool and returned
+func internString(s string) string {
+	// Check if string is already interned
+	if interned, ok := stringInternPool.Load(s); ok {
+		return interned.(string)
+	}
+	
+	// If the string is short (under 24 bytes), it's not worth interning
+	// because the sync.Map overhead would be more than the saved memory
+	if len(s) < 24 {
+		return s
+	}
+	
+	// Store the string in the pool for future use
+	stringInternPool.Store(s, s)
+	return s
+}
+
 // UnmarshalJSON implements the json.Unmarshaler interface.
 func (nb *NullBool) UnmarshalJSON(b []byte) error {
 	// Use optimized implementation internally
@@ -647,9 +723,22 @@ func (id *IntDictionary) Scan(value interface{}) error {
 	if !ok {
 		return errors.New("Scan source is not []byte")
 	}
-	// Reset id before unmarshalling
-	*id = make(IntDictionary)
-	return json.Unmarshal(asBytes, id)
+	
+	// Standard unmarshal to a temporary map
+	m := make(map[string]int)
+	if err := json.Unmarshal(asBytes, &m); err != nil {
+		return err
+	}
+	
+	// Create a new map with interned keys
+	*id = make(IntDictionary, len(m))
+	for k, v := range m {
+		// Intern the key to reduce memory usage
+		internedKey := internString(k)
+		(*id)[internedKey] = v
+	}
+	
+	return nil
 }
 
 // Value implements the driver.Valuer interface.
@@ -683,7 +772,9 @@ func (id *IntDictionary) UnmarshalJSON(b []byte) error {
 	// Create a new map to ensure we start fresh
 	*id = make(IntDictionary, len(m))
 	for k, v := range m {
-		(*id)[k] = v
+		// Intern the key to reduce memory usage
+		internedKey := internString(k)
+		(*id)[internedKey] = v
 	}
 	
 	return nil

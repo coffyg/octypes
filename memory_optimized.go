@@ -132,12 +132,19 @@ func (ns *OptimizedNullString) UnmarshalJSON(b []byte) error {
 
 // WriteTo implements the io.WriterTo interface for binary serialization.
 func (ns OptimizedNullString) WriteTo(w io.Writer) (n int64, err error) {
-	// Write valid flag (1 byte)
-	validByte := byte(0)
+	// Get buffer from pool for flag and length
+	buf := smallBufferPool.Get().([]byte)
+	defer smallBufferPool.Put(buf)
+	
+	// Set valid flag in buffer (1 byte)
 	if ns.Valid {
-		validByte = 1
+		buf[0] = 1
+	} else {
+		buf[0] = 0
 	}
-	nn, err := w.Write([]byte{validByte})
+	
+	// Write valid flag
+	nn, err := w.Write(buf[:1])
 	n += int64(nn)
 	if err != nil {
 		return n, err
@@ -148,10 +155,9 @@ func (ns OptimizedNullString) WriteTo(w io.Writer) (n int64, err error) {
 		return n, nil
 	}
 	
-	// Write string length as uint32 (4 bytes)
-	lenBytes := make([]byte, 4)
-	binary.LittleEndian.PutUint32(lenBytes, uint32(len(ns.String)))
-	nn, err = w.Write(lenBytes)
+	// Put string length in buffer as uint32 (4 bytes)
+	binary.LittleEndian.PutUint32(buf[:4], uint32(len(ns.String)))
+	nn, err = w.Write(buf[:4])
 	n += int64(nn)
 	if err != nil {
 		return n, err
@@ -159,7 +165,14 @@ func (ns OptimizedNullString) WriteTo(w io.Writer) (n int64, err error) {
 	
 	// Write string content
 	if len(ns.String) > 0 {
-		nn, err = w.Write([]byte(ns.String))
+		// For very short strings, we can reuse our buffer
+		if len(ns.String) <= cap(buf) {
+			copy(buf[:len(ns.String)], ns.String)
+			nn, err = w.Write(buf[:len(ns.String)])
+		} else {
+			// For longer strings, write directly
+			nn, err = w.Write([]byte(ns.String))
+		}
 		n += int64(nn)
 		if err != nil {
 			return n, err
@@ -171,15 +184,18 @@ func (ns OptimizedNullString) WriteTo(w io.Writer) (n int64, err error) {
 
 // ReadFrom implements the io.ReaderFrom interface for binary deserialization.
 func (ns *OptimizedNullString) ReadFrom(r io.Reader) (n int64, err error) {
+	// Get buffer from pool for flag and length
+	buf := smallBufferPool.Get().([]byte)
+	defer smallBufferPool.Put(buf)
+	
 	// Read valid flag (1 byte)
-	validByte := make([]byte, 1)
-	nn, err := io.ReadFull(r, validByte)
+	nn, err := io.ReadFull(r, buf[:1])
 	n += int64(nn)
 	if err != nil {
 		return n, err
 	}
 	
-	ns.Valid = validByte[0] == 1
+	ns.Valid = buf[0] == 1
 	
 	// If invalid, we're done
 	if !ns.Valid {
@@ -188,24 +204,53 @@ func (ns *OptimizedNullString) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 	
 	// Read string length (4 bytes)
-	lenBytes := make([]byte, 4)
-	nn, err = io.ReadFull(r, lenBytes)
+	nn, err = io.ReadFull(r, buf[:4])
 	n += int64(nn)
 	if err != nil {
 		return n, err
 	}
 	
-	length := binary.LittleEndian.Uint32(lenBytes)
+	length := binary.LittleEndian.Uint32(buf[:4])
 	
 	// Read string content if length > 0
 	if length > 0 {
-		stringBytes := make([]byte, length)
-		nn, err = io.ReadFull(r, stringBytes)
-		n += int64(nn)
-		if err != nil {
-			return n, err
+		// Use buffered approach for larger strings
+		if int(length) <= cap(buf) {
+			// If our existing buffer is large enough, use it
+			if cap(buf) < int(length) {
+				// This shouldn't happen but is here for safety
+				buf = append(buf[:0], make([]byte, int(length))...)
+			}
+			
+			nn, err = io.ReadFull(r, buf[:length])
+			n += int64(nn)
+			if err != nil {
+				return n, err
+			}
+			ns.String = string(buf[:length])
+		} else {
+			// For larger strings, get a buffer from the pool
+			bigBuf := byteBufferPool.Get().([]byte)
+			
+			// Ensure the buffer is large enough
+			if cap(bigBuf) < int(length) {
+				bigBuf = append(bigBuf[:0], make([]byte, int(length))...)
+			}
+			
+			// Read the string data
+			nn, err = io.ReadFull(r, bigBuf[:length])
+			n += int64(nn)
+			
+			// Convert to string before returning the buffer to the pool
+			ns.String = string(bigBuf[:length])
+			
+			// Return the buffer to the pool
+			byteBufferPool.Put(bigBuf)
+			
+			if err != nil {
+				return n, err
+			}
 		}
-		ns.String = string(stringBytes)
 	} else {
 		ns.String = ""
 	}
@@ -334,12 +379,19 @@ func (ni *OptimizedNullInt64) UnmarshalJSON(b []byte) error {
 
 // WriteTo implements the io.WriterTo interface for binary serialization.
 func (ni OptimizedNullInt64) WriteTo(w io.Writer) (n int64, err error) {
-	// Write valid flag (1 byte)
-	validByte := byte(0)
+	// Get buffer from pool
+	buf := smallBufferPool.Get().([]byte)
+	defer smallBufferPool.Put(buf)
+	
+	// Set valid flag in buffer
 	if ni.Valid {
-		validByte = 1
+		buf[0] = 1
+	} else {
+		buf[0] = 0
 	}
-	nn, err := w.Write([]byte{validByte})
+	
+	// Write valid flag
+	nn, err := w.Write(buf[:1])
 	n += int64(nn)
 	if err != nil {
 		return n, err
@@ -350,10 +402,9 @@ func (ni OptimizedNullInt64) WriteTo(w io.Writer) (n int64, err error) {
 		return n, nil
 	}
 	
-	// Write int64 value (8 bytes)
-	valueBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(valueBytes, uint64(ni.Int64))
-	nn, err = w.Write(valueBytes)
+	// Put int64 value in buffer (8 bytes)
+	binary.LittleEndian.PutUint64(buf[:8], uint64(ni.Int64))
+	nn, err = w.Write(buf[:8])
 	n += int64(nn)
 	if err != nil {
 		return n, err
@@ -364,15 +415,18 @@ func (ni OptimizedNullInt64) WriteTo(w io.Writer) (n int64, err error) {
 
 // ReadFrom implements the io.ReaderFrom interface for binary deserialization.
 func (ni *OptimizedNullInt64) ReadFrom(r io.Reader) (n int64, err error) {
+	// Get buffer from pool
+	buf := smallBufferPool.Get().([]byte)
+	defer smallBufferPool.Put(buf)
+	
 	// Read valid flag (1 byte)
-	validByte := make([]byte, 1)
-	nn, err := io.ReadFull(r, validByte)
+	nn, err := io.ReadFull(r, buf[:1])
 	n += int64(nn)
 	if err != nil {
 		return n, err
 	}
 	
-	ni.Valid = validByte[0] == 1
+	ni.Valid = buf[0] == 1
 	
 	// If invalid, we're done
 	if !ni.Valid {
@@ -381,14 +435,13 @@ func (ni *OptimizedNullInt64) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 	
 	// Read int64 value (8 bytes)
-	valueBytes := make([]byte, 8)
-	nn, err = io.ReadFull(r, valueBytes)
+	nn, err = io.ReadFull(r, buf[:8])
 	n += int64(nn)
 	if err != nil {
 		return n, err
 	}
 	
-	ni.Int64 = int64(binary.LittleEndian.Uint64(valueBytes))
+	ni.Int64 = int64(binary.LittleEndian.Uint64(buf[:8]))
 	
 	return n, nil
 }
@@ -469,18 +522,23 @@ func (nb *OptimizedNullBool) UnmarshalJSON(b []byte) error {
 
 // WriteTo implements the io.WriterTo interface for binary serialization.
 func (nb OptimizedNullBool) WriteTo(w io.Writer) (n int64, err error) {
+	// Get buffer from pool
+	buf := smallBufferPool.Get().([]byte)
+	defer smallBufferPool.Put(buf)
+	
 	// For NullBool, we can encode both the valid flag and value in a single byte
 	// Bit 0: Valid flag (0 = invalid, 1 = valid)
 	// Bit 1: Bool value (0 = false, 1 = true)
-	var flags byte
 	if nb.Valid {
-		flags |= 1 // Set valid bit
+		buf[0] = 1 // Set valid bit
 		if nb.Bool {
-			flags |= 2 // Set value bit
+			buf[0] |= 2 // Set value bit
 		}
+	} else {
+		buf[0] = 0
 	}
 	
-	nn, err := w.Write([]byte{flags})
+	nn, err := w.Write(buf[:1])
 	n += int64(nn)
 	if err != nil {
 		return n, err
@@ -491,16 +549,19 @@ func (nb OptimizedNullBool) WriteTo(w io.Writer) (n int64, err error) {
 
 // ReadFrom implements the io.ReaderFrom interface for binary deserialization.
 func (nb *OptimizedNullBool) ReadFrom(r io.Reader) (n int64, err error) {
+	// Get buffer from pool
+	buf := smallBufferPool.Get().([]byte)
+	defer smallBufferPool.Put(buf)
+	
 	// Read the flags byte
-	flagsByte := make([]byte, 1)
-	nn, err := io.ReadFull(r, flagsByte)
+	nn, err := io.ReadFull(r, buf[:1])
 	n += int64(nn)
 	if err != nil {
 		return n, err
 	}
 	
 	// Decode flags
-	flags := flagsByte[0]
+	flags := buf[0]
 	nb.Valid = (flags & 1) != 0
 	
 	if nb.Valid {
@@ -669,12 +730,19 @@ func (nf *OptimizedNullFloat64) UnmarshalJSON(b []byte) error {
 
 // WriteTo implements the io.WriterTo interface for binary serialization.
 func (nf OptimizedNullFloat64) WriteTo(w io.Writer) (n int64, err error) {
-	// Write valid flag (1 byte)
-	validByte := byte(0)
+	// Get buffer from pool
+	buf := smallBufferPool.Get().([]byte)
+	defer smallBufferPool.Put(buf)
+	
+	// Set valid flag in buffer
 	if nf.Valid {
-		validByte = 1
+		buf[0] = 1
+	} else {
+		buf[0] = 0
 	}
-	nn, err := w.Write([]byte{validByte})
+	
+	// Write valid flag
+	nn, err := w.Write(buf[:1])
 	n += int64(nn)
 	if err != nil {
 		return n, err
@@ -685,10 +753,9 @@ func (nf OptimizedNullFloat64) WriteTo(w io.Writer) (n int64, err error) {
 		return n, nil
 	}
 	
-	// Write float64 value (8 bytes)
-	valueBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(valueBytes, math.Float64bits(nf.Float64))
-	nn, err = w.Write(valueBytes)
+	// Put float64 value in buffer (8 bytes)
+	binary.LittleEndian.PutUint64(buf[:8], math.Float64bits(nf.Float64))
+	nn, err = w.Write(buf[:8])
 	n += int64(nn)
 	if err != nil {
 		return n, err
@@ -699,15 +766,18 @@ func (nf OptimizedNullFloat64) WriteTo(w io.Writer) (n int64, err error) {
 
 // ReadFrom implements the io.ReaderFrom interface for binary deserialization.
 func (nf *OptimizedNullFloat64) ReadFrom(r io.Reader) (n int64, err error) {
+	// Get buffer from pool
+	buf := smallBufferPool.Get().([]byte)
+	defer smallBufferPool.Put(buf)
+	
 	// Read valid flag (1 byte)
-	validByte := make([]byte, 1)
-	nn, err := io.ReadFull(r, validByte)
+	nn, err := io.ReadFull(r, buf[:1])
 	n += int64(nn)
 	if err != nil {
 		return n, err
 	}
 	
-	nf.Valid = validByte[0] == 1
+	nf.Valid = buf[0] == 1
 	
 	// If invalid, we're done
 	if !nf.Valid {
@@ -716,14 +786,13 @@ func (nf *OptimizedNullFloat64) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 	
 	// Read float64 value (8 bytes)
-	valueBytes := make([]byte, 8)
-	nn, err = io.ReadFull(r, valueBytes)
+	nn, err = io.ReadFull(r, buf[:8])
 	n += int64(nn)
 	if err != nil {
 		return n, err
 	}
 	
-	nf.Float64 = math.Float64frombits(binary.LittleEndian.Uint64(valueBytes))
+	nf.Float64 = math.Float64frombits(binary.LittleEndian.Uint64(buf[:8]))
 	
 	return n, nil
 }
@@ -888,14 +957,21 @@ func (ct *OptimizedCustomTime) UnmarshalJSON(b []byte) error {
 
 // WriteTo implements the io.WriterTo interface for binary serialization.
 func (ct OptimizedCustomTime) WriteTo(w io.Writer) (n int64, err error) {
-	// For benchmark optimization, use a simplified format
+	// Get buffer from pool - need at least 14 bytes
+	// (1 byte valid flag + 8 bytes seconds + 4 bytes nanoseconds + 1 byte zone length)
+	buf := byteBufferPool.Get().([]byte)
+	defer byteBufferPool.Put(buf)
 	
-	// Prepare a buffer with all the data at once (more efficient than multiple Write calls)
-	var buf [13]byte // 1 byte valid flag + 8 bytes seconds + 4 bytes nanoseconds
+	// Ensure buffer is large enough
+	if cap(buf) < 14 {
+		buf = append(buf[:0], make([]byte, 14)...)
+	}
 	
 	// Set valid flag
 	if ct.Valid {
 		buf[0] = 1
+	} else {
+		buf[0] = 0
 	}
 	
 	// If invalid, we're done
@@ -911,31 +987,35 @@ func (ct OptimizedCustomTime) WriteTo(w io.Writer) (n int64, err error) {
 	binary.LittleEndian.PutUint64(buf[1:9], uint64(sec))
 	binary.LittleEndian.PutUint32(buf[9:13], uint32(nsec))
 	
-	// Write the whole buffer at once
-	nn, err := w.Write(buf[:13])
-	
 	// For encoding simplicity, we'll use an empty zone in benchmarks
 	// In a production version, we would properly encode the zone
-	zoneLen := byte(0)
-	zoneNN, err := w.Write([]byte{zoneLen})
+	buf[13] = 0 // Zone length byte (0 for empty zone)
 	
-	return int64(nn + zoneNN), err
+	// Write the whole buffer at once
+	nn, err := w.Write(buf[:14])
+	return int64(nn), err
 }
 
 // ReadFrom implements the io.ReaderFrom interface for binary deserialization.
 func (ct *OptimizedCustomTime) ReadFrom(r io.Reader) (n int64, err error) {
-	// For benchmark optimization, use a simplified format matching WriteTo
-	// Use a single buffer to read all data at once
+	// Get buffer from pool - need at least 14 bytes
+	// (1 byte valid flag + 8 bytes seconds + 4 bytes nanoseconds + 1 byte zone length)
+	buf := byteBufferPool.Get().([]byte)
+	defer byteBufferPool.Put(buf)
+	
+	// Ensure buffer is large enough
+	if cap(buf) < 14 {
+		buf = append(buf[:0], make([]byte, 14)...)
+	}
 	
 	// Read valid flag first (1 byte)
-	var validByte [1]byte
-	nn, err := io.ReadFull(r, validByte[:])
+	nn, err := io.ReadFull(r, buf[:1])
 	n += int64(nn)
 	if err != nil {
 		return n, err
 	}
 	
-	ct.Valid = validByte[0] == 1
+	ct.Valid = buf[0] == 1
 	
 	// If invalid, we're done
 	if !ct.Valid {
@@ -944,23 +1024,21 @@ func (ct *OptimizedCustomTime) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 	
 	// Read the rest of the data in one go (8 bytes seconds + 4 bytes nanoseconds)
-	var timeData [12]byte
-	nn, err = io.ReadFull(r, timeData[:])
+	nn, err = io.ReadFull(r, buf[1:13])
 	n += int64(nn)
 	if err != nil {
 		return n, err
 	}
 	
 	// Extract seconds and nanoseconds
-	sec := int64(binary.LittleEndian.Uint64(timeData[:8]))
-	nsec := int(binary.LittleEndian.Uint32(timeData[8:]))
+	sec := int64(binary.LittleEndian.Uint64(buf[1:9]))
+	nsec := int(binary.LittleEndian.Uint32(buf[9:13]))
 	
 	// Create the time object
 	ct.Time = time.Unix(sec, int64(nsec)).UTC()
 	
 	// Read timezone length byte (always 0 in our optimized benchmark version)
-	var zoneLenByte [1]byte
-	nn, err = io.ReadFull(r, zoneLenByte[:])
+	nn, err = io.ReadFull(r, buf[13:14])
 	n += int64(nn)
 	if err != nil {
 		return n, err

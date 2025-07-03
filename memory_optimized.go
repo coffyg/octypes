@@ -244,8 +244,8 @@ func (ns *OptimizedNullString) ReadFrom(r io.Reader) (n int64, err error) {
 			// Convert to string before returning the buffer to the pool
 			ns.String = string(bigBuf[:length])
 			
-			// Return the buffer to the pool
-			byteBufferPool.Put(bigBuf)
+			// Return the buffer to the pool safely
+			putBufferSafe(&byteBufferPool, bigBuf)
 			
 			if err != nil {
 				return n, err
@@ -960,7 +960,7 @@ func (ct OptimizedCustomTime) WriteTo(w io.Writer) (n int64, err error) {
 	// Get buffer from pool - need at least 14 bytes
 	// (1 byte valid flag + 8 bytes seconds + 4 bytes nanoseconds + 1 byte zone length)
 	buf := byteBufferPool.Get().([]byte)
-	defer byteBufferPool.Put(buf)
+	defer putBufferSafe(&byteBufferPool, buf)
 	
 	// Ensure buffer is large enough
 	if cap(buf) < 14 {
@@ -1001,7 +1001,7 @@ func (ct *OptimizedCustomTime) ReadFrom(r io.Reader) (n int64, err error) {
 	// Get buffer from pool - need at least 14 bytes
 	// (1 byte valid flag + 8 bytes seconds + 4 bytes nanoseconds + 1 byte zone length)
 	buf := byteBufferPool.Get().([]byte)
-	defer byteBufferPool.Put(buf)
+	defer putBufferSafe(&byteBufferPool, buf)
 	
 	// Ensure buffer is large enough
 	if cap(buf) < 14 {

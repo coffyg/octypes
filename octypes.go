@@ -97,7 +97,8 @@ var (
 	}
 	
 	// String intern pool for reducing string allocations in maps
-	stringInternPool sync.Map
+	// Using a bounded LRU cache to prevent unbounded memory growth
+	stringInternPool *InternPool
 	
 	// Common keys that are frequently used in map types
 	commonMapKeys = []string{
@@ -119,10 +120,14 @@ func init() {
 		digitMap[i] = []byte(strconv.Itoa(i))
 	}
 	
+	// Initialize bounded intern pool with max 10,000 entries
+	// and minimum string length of 24 bytes
+	stringInternPool = NewInternPool(10000, 24)
+	
 	// Pre-intern common map keys
 	for _, key := range commonMapKeys {
-		// Store the string as both key and value in the intern pool
-		stringInternPool.Store(key, key)
+		// Add common keys to the intern pool
+		stringInternPool.Intern(key)
 	}
 }
 
@@ -564,23 +569,9 @@ func isFalseJSON(b []byte) bool {
 }
 
 // internString returns an interned version of the string to reduce memory usage
-// If the string is already in the pool, the interned version is returned
-// Otherwise, the string is added to the pool and returned
+// Uses a bounded LRU cache to prevent unbounded memory growth
 func internString(s string) string {
-	// Check if string is already interned
-	if interned, ok := stringInternPool.Load(s); ok {
-		return interned.(string)
-	}
-	
-	// If the string is short (under 24 bytes), it's not worth interning
-	// because the sync.Map overhead would be more than the saved memory
-	if len(s) < 24 {
-		return s
-	}
-	
-	// Store the string in the pool for future use
-	stringInternPool.Store(s, s)
-	return s
+	return stringInternPool.Intern(s)
 }
 
 // UnmarshalJSON implements the json.Unmarshaler interface.

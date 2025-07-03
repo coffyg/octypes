@@ -1,0 +1,100 @@
+
+=== NullString ===
+Struct NullString: size=24, align=8
+  Field: NullString, offset=0, size=24, align=8
+
+
+=== NullInt64 ===
+Struct NullInt64: size=16, align=8
+  Field: NullInt64, offset=0, size=16, align=8
+
+
+=== NullBool ===
+Struct NullBool: size=2, align=1
+  Field: NullBool, offset=0, size=2, align=1
+
+
+=== NullFloat64 ===
+Struct NullFloat64: size=16, align=8
+  Field: NullFloat64, offset=0, size=16, align=8
+
+
+=== CustomTime ===
+Struct CustomTime: size=32, align=8
+  Field: NullTime, offset=0, size=32, align=8
+
+
+=== sql.NullString ===
+Struct : size=24, align=8
+  Field: NullString, offset=0, size=24, align=8
+
+
+=== sql.NullInt64 ===
+Struct : size=16, align=8
+  Field: NullInt64, offset=0, size=16, align=8
+
+
+=== sql.NullBool ===
+Struct : size=2, align=1
+  Field: NullBool, offset=0, size=2, align=1
+
+
+=== sql.NullFloat64 ===
+Struct : size=16, align=8
+  Field: NullFloat64, offset=0, size=16, align=8
+
+
+=== TestStruct ===
+Struct TestStruct: size=64, align=8
+  Field: Name, offset=0, size=24, align=8
+  Field: Age, offset=24, size=16, align=8
+  Field: Score, offset=40, size=16, align=8
+  Field: Active, offset=56, size=2, align=1
+
+
+=== OptimizedTestStruct ===
+Struct OptimizedTestStruct: size=64, align=8
+  Field: Age, offset=0, size=16, align=8
+  Field: Score, offset=16, size=16, align=8
+  Field: Name, offset=32, size=24, align=8
+  Field: Active, offset=56, size=2, align=1
+
+
+Total size of optimized types: 58 bytes
+
+=== FullyOptimizedStruct ===
+Struct FullyOptimizedStruct: size=64, align=8
+  Field: Int64, offset=0, size=16, align=8
+  Field: Float, offset=16, size=16, align=8
+  Field: String, offset=32, size=24, align=8
+  Field: Bool, offset=56, size=2, align=1
+
+goos: linux
+goarch: amd64
+pkg: github.com/coffyg/octypes
+cpu: 13th Gen Intel(R) Core(TM) i7-13700
+BenchmarkLocalizedTextUnmarshalWithIntern-24        	    2139	      5611 ns/op	    2438 B/op	      48 allocs/op
+BenchmarkLocalizedTextMapOperations-24              	  312483	        32.87 ns/op	       0 B/op	       0 allocs/op
+BenchmarkReferenceLocalizedTextUnmarshal-24         	    2211	     10034 ns/op	    2440 B/op	      48 allocs/op
+BenchmarkReferenceLocalizedTextMapOperations-24     	  485095	        64.28 ns/op	       0 B/op	       0 allocs/op
+BenchmarkOptimizedComplexStructJSON-24              	    3562	      3034 ns/op	    1126 B/op	      13 allocs/op
+BenchmarkOptimizedComplexStructBinary-24            	   24104	       543.6 ns/op	     473 B/op	      12 allocs/op
+BenchmarkOptimizedComplexStructFromJSON-24          	    1124	      8986 ns/op	    1216 B/op	      28 allocs/op
+BenchmarkOptimizedComplexStructFromBinary-24        	   17169	       716.1 ns/op	     328 B/op	      12 allocs/op
+BenchmarkOptimizedNullStringJSON-24                 	  115066	        94.73 ns/op	      16 B/op	       2 allocs/op
+BenchmarkOptimizedNullInt64JSON-24                  	  127647	        90.02 ns/op	       8 B/op	       1 allocs/op
+BenchmarkOptimizedNullBoolJSON-24                   	  126706	        82.26 ns/op	       8 B/op	       1 allocs/op
+BenchmarkOptimizedNullFloat64JSON-24                	   45854	       239.3 ns/op	      40 B/op	       3 allocs/op
+BenchmarkOptimizedCustomTimeJSON-24                 	    7460	      1496 ns/op	     337 B/op	       3 allocs/op
+BenchmarkOptimizedNullStringNullJSON-24             	   93500	       130.4 ns/op	       8 B/op	       1 allocs/op
+BenchmarkOptimizedNullInt64NullJSON-24              	  142970	        93.35 ns/op	       8 B/op	       1 allocs/op
+BenchmarkOptimizedNullBoolNullJSON-24               	  109840	        96.10 ns/op	       8 B/op	       1 allocs/op
+BenchmarkOptimizedNullFloat64NullJSON-24            	  120984	        89.27 ns/op	       8 B/op	       1 allocs/op
+BenchmarkOptimizedNullStringUnmarshalJSON-24        	   84446	       207.6 ns/op	     184 B/op	       3 allocs/op
+BenchmarkOptimizedNullStringUnmarshalNullJSON-24    	   90087	       168.7 ns/op	     168 B/op	       2 allocs/op
+BenchmarkOptimizedNullInt64UnmarshalJSON-24         	   50952	       304.9 ns/op	     160 B/op	       2 allocs/op
+BenchmarkOptimizedNullBoolUnmarshalJSON-24          	   31822	       334.4 ns/op	     146 B/op	       2 allocs/op
+BenchmarkOptimizedNullFloat64UnmarshalJSON-24       	   91148	       158.3 ns/op	     160 B/op	       2 allocs/op
+BenchmarkOptimizedNullStringBinary-24               	  105559	       161.4 ns/op	     152 B/op	       4 allocs/op
+BenchmarkOptimizedNullInt64Binary-24                	  103317	       213.5 ns/op	     136 B/op	       3 allocs/op
+BenchmarkOptimizedNullBoolBinary-24                 	   41796	       253.8 ns/op	     136 B/op	       3 allocs/op

@@ -41,7 +41,7 @@ var (
 	nullJSON  = []byte("null")
 	trueJSON  = []byte("true")
 	falseJSON = []byte("false")
-	
+
 	// Digits
 	digit0JSON = []byte("0")
 	digit1JSON = []byte("1")
@@ -53,17 +53,17 @@ var (
 	digit7JSON = []byte("7")
 	digit8JSON = []byte("8")
 	digit9JSON = []byte("9")
-	
+
 	// Empty values
 	emptyStringJSON = []byte(`""`)
 	emptyArrayJSON  = []byte("[]")
 	emptyObjectJSON = []byte("{}")
-	
+
 	// Common patterns
-	commaJSON     = []byte(",")
-	colonJSON     = []byte(":")
-	quoteJSON     = []byte(`"`)
-	leftBraceJSON = []byte("{")
+	commaJSON      = []byte(",")
+	colonJSON      = []byte(":")
+	quoteJSON      = []byte(`"`)
+	leftBraceJSON  = []byte("{")
 	rightBraceJSON = []byte("}")
 )
 
@@ -78,7 +78,7 @@ var (
 			return &TimeResponse{}
 		},
 	}
-	
+
 	// Pool for byte slices used in unmarshaling
 	byteBufferPool = sync.Pool{
 		New: func() interface{} {
@@ -87,7 +87,7 @@ var (
 			return make([]byte, 64)
 		},
 	}
-	
+
 	// Pool for small byte slices used in binary serialization
 	smallBufferPool = sync.Pool{
 		New: func() interface{} {
@@ -95,11 +95,11 @@ var (
 			return make([]byte, 8)
 		},
 	}
-	
+
 	// String intern pool for reducing string allocations in maps
 	// Using a bounded LRU cache to prevent unbounded memory growth
 	stringInternPool *InternPool
-	
+
 	// Common keys that are frequently used in map types
 	commonMapKeys = []string{
 		"id", "name", "title", "description", "type", "status", "value",
@@ -119,11 +119,11 @@ func init() {
 	for i := 0; i < 100; i++ {
 		digitMap[i] = []byte(strconv.Itoa(i))
 	}
-	
+
 	// Initialize bounded intern pool with max 10,000 entries
 	// and minimum string length of 24 bytes
 	stringInternPool = NewInternPool(10000, 24)
-	
+
 	// Pre-intern common map keys
 	for _, key := range commonMapKeys {
 		// Add common keys to the intern pool
@@ -216,11 +216,11 @@ func (ct *CustomTime) UnmarshalJSON(b []byte) error {
 	// Use optimized implementation internally
 	var opt OptimizedCustomTime
 	err := opt.UnmarshalJSON(b)
-	
+
 	// Copy the values back
 	ct.Time = opt.Time
 	ct.Valid = opt.Valid
-	
+
 	return err
 }
 
@@ -239,11 +239,11 @@ func (ct *CustomTime) ReadFrom(r io.Reader) (n int64, err error) {
 	// Use optimized implementation internally
 	var opt OptimizedCustomTime
 	n, err = opt.ReadFrom(r)
-	
+
 	// Copy the values back
 	ct.Time = opt.Time
 	ct.Valid = opt.Valid
-	
+
 	return n, err
 }
 
@@ -306,11 +306,11 @@ func (ns *NullString) UnmarshalJSON(b []byte) error {
 	// Use optimized implementation internally
 	var opt OptimizedNullString
 	err := opt.UnmarshalJSON(b)
-	
+
 	// Copy the values back
 	ns.String = opt.String
 	ns.Valid = opt.Valid
-	
+
 	return err
 }
 
@@ -329,16 +329,21 @@ func (ns *NullString) ReadFrom(r io.Reader) (n int64, err error) {
 	// Use optimized implementation internally
 	var opt OptimizedNullString
 	n, err = opt.ReadFrom(r)
-	
+
 	// Copy the values back
 	ns.String = opt.String
 	ns.Valid = opt.Valid
-	
+
 	return n, err
 }
 
 // LocalizedText represents a map of localized strings.
 type LocalizedText map[string]string
+
+func NewLocalizedNil() *LocalizedText {
+	var lt LocalizedText = nil
+	return &lt
+}
 
 // Scan implements the sql.Scanner interface.
 func (lt *LocalizedText) Scan(value interface{}) error {
@@ -350,13 +355,13 @@ func (lt *LocalizedText) Scan(value interface{}) error {
 	if !ok {
 		return errors.New("Scan source is not []byte")
 	}
-	
+
 	// Standard unmarshal to a temporary map
 	m := make(map[string]string)
 	if err := json.Unmarshal(asBytes, &m); err != nil {
 		return err
 	}
-	
+
 	// Create a new map with interned keys
 	*lt = make(LocalizedText, len(m))
 	for k, v := range m {
@@ -364,7 +369,7 @@ func (lt *LocalizedText) Scan(value interface{}) error {
 		internedKey := internString(k)
 		(*lt)[internedKey] = v
 	}
-	
+
 	return nil
 }
 
@@ -383,19 +388,19 @@ func (lt *LocalizedText) UnmarshalJSON(b []byte) error {
 		*lt = nil
 		return nil
 	}
-	
+
 	// Fast path for empty object
 	if len(b) <= 2 && b[0] == '{' && b[len(b)-1] == '}' {
 		*lt = make(LocalizedText)
 		return nil
 	}
-	
+
 	// Standard unmarshal for other cases
 	m := make(map[string]string)
 	if err := json.Unmarshal(b, &m); err != nil {
 		return err
 	}
-	
+
 	// Create a new map to ensure we start fresh
 	*lt = make(LocalizedText, len(m))
 	for k, v := range m {
@@ -403,7 +408,7 @@ func (lt *LocalizedText) UnmarshalJSON(b []byte) error {
 		internedKey := internString(k)
 		(*lt)[internedKey] = v
 	}
-	
+
 	return nil
 }
 
@@ -467,11 +472,11 @@ func (ni *NullInt64) UnmarshalJSON(b []byte) error {
 	// Use optimized implementation internally
 	var opt OptimizedNullInt64
 	err := opt.UnmarshalJSON(b)
-	
+
 	// Copy the values back
 	ni.Int64 = opt.Int64
 	ni.Valid = opt.Valid
-	
+
 	return err
 }
 
@@ -490,11 +495,11 @@ func (ni *NullInt64) ReadFrom(r io.Reader) (n int64, err error) {
 	// Use optimized implementation internally
 	var opt OptimizedNullInt64
 	n, err = opt.ReadFrom(r)
-	
+
 	// Copy the values back
 	ni.Int64 = opt.Int64
 	ni.Valid = opt.Valid
-	
+
 	return n, err
 }
 
@@ -579,11 +584,11 @@ func (nb *NullBool) UnmarshalJSON(b []byte) error {
 	// Use optimized implementation internally
 	var opt OptimizedNullBool
 	err := opt.UnmarshalJSON(b)
-	
+
 	// Copy the values back
 	nb.Bool = opt.Bool
 	nb.Valid = opt.Valid
-	
+
 	return err
 }
 
@@ -602,11 +607,11 @@ func (nb *NullBool) ReadFrom(r io.Reader) (n int64, err error) {
 	// Use optimized implementation internally
 	var opt OptimizedNullBool
 	n, err = opt.ReadFrom(r)
-	
+
 	// Copy the values back
 	nb.Bool = opt.Bool
 	nb.Valid = opt.Valid
-	
+
 	return n, err
 }
 
@@ -670,11 +675,11 @@ func (nf *NullFloat64) UnmarshalJSON(b []byte) error {
 	// Use optimized implementation internally
 	var opt OptimizedNullFloat64
 	err := opt.UnmarshalJSON(b)
-	
+
 	// Copy the values back
 	nf.Float64 = opt.Float64
 	nf.Valid = opt.Valid
-	
+
 	return err
 }
 
@@ -693,11 +698,11 @@ func (nf *NullFloat64) ReadFrom(r io.Reader) (n int64, err error) {
 	// Use optimized implementation internally
 	var opt OptimizedNullFloat64
 	n, err = opt.ReadFrom(r)
-	
+
 	// Copy the values back
 	nf.Float64 = opt.Float64
 	nf.Valid = opt.Valid
-	
+
 	return n, err
 }
 
@@ -714,13 +719,13 @@ func (id *IntDictionary) Scan(value interface{}) error {
 	if !ok {
 		return errors.New("Scan source is not []byte")
 	}
-	
+
 	// Standard unmarshal to a temporary map
 	m := make(map[string]int)
 	if err := json.Unmarshal(asBytes, &m); err != nil {
 		return err
 	}
-	
+
 	// Create a new map with interned keys
 	*id = make(IntDictionary, len(m))
 	for k, v := range m {
@@ -728,7 +733,7 @@ func (id *IntDictionary) Scan(value interface{}) error {
 		internedKey := internString(k)
 		(*id)[internedKey] = v
 	}
-	
+
 	return nil
 }
 
@@ -747,19 +752,19 @@ func (id *IntDictionary) UnmarshalJSON(b []byte) error {
 		*id = nil
 		return nil
 	}
-	
+
 	// Fast path for empty object
 	if len(b) <= 2 && b[0] == '{' && b[len(b)-1] == '}' {
 		*id = make(IntDictionary)
 		return nil
 	}
-	
+
 	// Standard unmarshal for other cases
 	m := make(map[string]int)
 	if err := json.Unmarshal(b, &m); err != nil {
 		return err
 	}
-	
+
 	// Create a new map to ensure we start fresh
 	*id = make(IntDictionary, len(m))
 	for k, v := range m {
@@ -767,6 +772,6 @@ func (id *IntDictionary) UnmarshalJSON(b []byte) error {
 		internedKey := internString(k)
 		(*id)[internedKey] = v
 	}
-	
+
 	return nil
 }
